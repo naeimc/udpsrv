@@ -1,6 +1,6 @@
 # udpsrv
 
-UDP Srv a small UDP server written in Go (Golang).
+UDP srv is a small UDP server written in Go (Golang).
 
 ## Contents
 - [udpsrv](#udpsrv)
