@@ -3,26 +3,25 @@ package udpsrv
 import (
 	"fmt"
 	"net"
-	"runtime"
 	"time"
 )
 
 func Example() {
 
-	queue := NewStdQueue(16, runtime.NumCPU(), time.Second)
+	server := Server{
+		Listeners: make([]*Listener, 0),
+		Queue:     NewBasicQueue(2),
+	}
 
 	listener := &Listener{
 		Address:        "127.0.0.1:49000",
 		BufferSize:     1024,
-		InitialHandler: func(b Bundle) { queue.Enqueue(b) },
+		InitialHandler: func(b Bundle) { server.Queue.Enqueue(b) },
 		PacketHandler:  func(r Responder, p *Packet) { fmt.Printf("(%d) %s\n", p.Length, string(p.Data)) },
 		ErrorHandler:   func(err error) { fmt.Printf("%s", err) },
 	}
 
-	server := Server{
-		Listeners: []*Listener{listener},
-		Queue:     queue,
-	}
+	server.Listeners = append(server.Listeners, listener)
 
 	go func() {
 		time.Sleep(8 * time.Second)
