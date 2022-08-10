@@ -11,8 +11,8 @@ type Server struct {
 	// The Queue on which server receives bundles of data from the listeners.
 	Queue Queue
 
-	// The Done channel is channel (of size 2) that returns both the reason for the server shutdown
-	// and an error if the server times out during shutdown.
+	// The Done channel is channel (of min size 2) that returns the reason for the server shutdown
+	// an error if the server times out during shutdown and any errors when closing the connection.
 	Done chan error
 
 	stopped     bool
