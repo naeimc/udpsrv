@@ -49,12 +49,12 @@ func (l *Listener) setup(queue Queue) error {
 	}
 	l.Connection = connection
 
-	if l.PacketHandler == nil {
-		l.InitialHandler = func(b Bundle) { queue.Enqueue(b) }
+	if l.InitialHandler == nil {
+		return ErrNoInitialHandler{}
 	}
 
-	if l.ErrorHandler == nil {
-		l.ErrorHandler = func(err error) {}
+	if l.PacketHandler == nil {
+		return ErrNoPacketHandler{}
 	}
 
 	if l.BufferSize <= 0 {
@@ -90,4 +90,16 @@ func (l *Listener) run() {
 func (l *Listener) halt() error {
 	l.halted = true
 	return l.Connection.Close()
+}
+
+type ErrNoInitialHandler struct{}
+
+func (e ErrNoInitialHandler) Error() string {
+	return "no initial handler set"
+}
+
+type ErrNoPacketHandler struct{}
+
+func (e ErrNoPacketHandler) Error() string {
+	return "no packet handler set"
 }
