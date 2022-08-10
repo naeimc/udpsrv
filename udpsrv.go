@@ -38,7 +38,7 @@ type Bundle struct {
 	Timestamp      time.Time
 	Connection     net.PacketConn
 	RequestHandler func(ResponseWriter, *Request)
-	ErrorHandler   func(error) error
+	ErrorHandler   func(error)
 	Length         int
 	LocalAddress   net.Addr
 	RemoteAddress  net.Addr

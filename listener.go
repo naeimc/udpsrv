@@ -23,9 +23,7 @@ type Listener struct {
 	RequestHandler func(ResponseWriter, *Request)
 
 	// The ErrorHandler processes any errors returned by net.PacketConn.ReadFrom().
-	// Errors returned by the ErrorHandler cause the server to panic.
-	// If nil all errors are passed to the server.
-	ErrorHandler func(error) error
+	ErrorHandler func(error)
 
 	// The size of the data buffer used by the client.
 	// If <= 0 the BufferSize is set to the the maximum size of a udp payload (65527).
@@ -52,7 +50,7 @@ func (l *Listener) setup(queue Queue) error {
 	}
 
 	if l.ErrorHandler == nil {
-		l.ErrorHandler = func(err error) error { return err }
+		l.ErrorHandler = func(err error) {}
 	}
 
 	if l.BufferSize <= 0 {

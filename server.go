@@ -11,11 +11,6 @@ type Server struct {
 	// The Queue on which server receives bundles of data from the listeners.
 	Queue Queue
 
-	// The error handler used by the server.
-	// Any errors passed to the server will be handled by this error handler.
-	// If nil the error handler will panic on any error received.
-	ErrorHandler func(error)
-
 	// How long to wait for workers to complete before forcing a shutdown.
 	// If 0 the server waits forever.
 	ShutdownTimeout time.Duration
@@ -50,10 +45,6 @@ func (s *Server) Close(reason error) {
 func (s *Server) setup() error {
 	if s.Queue == nil {
 		return ErrNoQueueAllocated{}
-	}
-
-	if s.ErrorHandler == nil {
-		s.ErrorHandler = func(err error) { panic(err) }
 	}
 
 	for _, listener := range s.Listeners {
@@ -97,9 +88,7 @@ func (s *Server) work(b Bundle) {
 	}
 
 	if b.Error != nil {
-		if err := b.ErrorHandler(b.Error); err != nil {
-			s.ErrorHandler(err)
-		}
+		b.ErrorHandler(b.Error)
 	}
 }
 

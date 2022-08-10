@@ -15,17 +15,13 @@ func Example() {
 		Address:        "127.0.0.1:49000",
 		PacketHandler:  func(b Bundle) { queue.Enqueue(b) },
 		RequestHandler: func(w ResponseWriter, r *Request) { fmt.Printf("(%d) %s\n", r.Length, string(r.Data)) },
-		ErrorHandler: func(err error) error {
-			fmt.Printf("%s", err)
-			return nil
-		},
-		BufferSize: 1024,
+		ErrorHandler:   func(err error) { fmt.Printf("%s", err) },
+		BufferSize:     1024,
 	}
 
 	server := Server{
 		Listeners:       []*Listener{listener},
 		Queue:           queue,
-		ErrorHandler:    func(err error) { panic(err) },
 		ShutdownTimeout: 10 * time.Second,
 	}
 
