@@ -1,6 +1,7 @@
 package udpsrv
 
 import (
+	"errors"
 	"net"
 	"time"
 )
@@ -14,29 +15,30 @@ type Listener struct {
 	// See net.ListenPacket for suitable address strings.
 	Address string
 
-	// The PacketHandler is responsible for handling the bundles of data from the client.
-	// The bundles are usually passed to the server's queue.
-	// If nil a default PacketHandler is used that calls the Queue's Enqueue function.
-	PacketHandler func(Bundle)
-
-	// The RequestHandler processes requests and provides an writer for responses.
-	RequestHandler func(ResponseWriter, *Request)
-
-	// The ErrorHandler processes any errors returned by net.PacketConn.ReadFrom().
-	// Errors returned by the ErrorHandler cause the server to panic.
-	// If nil all errors are passed to the server.
-	ErrorHandler func(error) error
-
 	// The size of the data buffer used by the client.
 	// If <= 0 the BufferSize is set to the the maximum size of a udp payload (65527).
 	// Data not captured in the buffer is discarded.
 	BufferSize int
+
+	// The InitialHandler is responsible for handling the initial connection
+	// by the client and passing it on the the queue.
+	// The bundles are usually passed to the server's queue.
+	// If nil a default PacketHandler is used that calls the Queue's Enqueue function.
+	InitialHandler func(Bundle)
+
+	// The PacketHandler processes requests and provides an writer for responses.
+	PacketHandler func(Responder, *Packet)
+
+	// The ErrorHandler processes any errors returned by net.PacketConn.ReadFrom().
+	ErrorHandler func(error)
 
 	// The connection used by the listener.
 	Connection net.PacketConn
 
 	// The buffer used by the Listener.
 	Buffer []byte
+
+	halted bool
 }
 
 func (l *Listener) setup(queue Queue) error {
@@ -47,12 +49,12 @@ func (l *Listener) setup(queue Queue) error {
 	}
 	l.Connection = connection
 
-	if l.PacketHandler == nil {
-		l.PacketHandler = func(b Bundle) { queue.Enqueue(b) }
+	if l.InitialHandler == nil {
+		return ErrNoInitialHandler{}
 	}
 
-	if l.ErrorHandler == nil {
-		l.ErrorHandler = func(err error) error { return err }
+	if l.PacketHandler == nil {
+		return ErrNoPacketHandler{}
 	}
 
 	if l.BufferSize <= 0 {
@@ -64,18 +66,40 @@ func (l *Listener) setup(queue Queue) error {
 }
 
 func (l *Listener) run() {
-	for {
+	for !l.halted {
 		length, address, err := l.Connection.ReadFrom(l.Buffer)
-		l.PacketHandler(Bundle{
-			Timestamp:      time.Now().UTC(),
-			Connection:     l.Connection,
-			RequestHandler: l.RequestHandler,
-			ErrorHandler:   l.ErrorHandler,
-			RemoteAddress:  address,
-			LocalAddress:   l.Connection.LocalAddr(),
-			Length:         length,
-			Data:           l.Buffer,
-			Error:          err,
+
+		if l.halted && errors.Is(err, net.ErrClosed) {
+			return
+		}
+
+		l.InitialHandler(Bundle{
+			Timestamp:     time.Now().UTC(),
+			Connection:    l.Connection,
+			PacketHandler: l.PacketHandler,
+			ErrorHandler:  l.ErrorHandler,
+			RemoteAddress: address,
+			LocalAddress:  l.Connection.LocalAddr(),
+			Length:        length,
+			Data:          l.Buffer,
+			Error:         err,
 		})
 	}
+}
+
+func (l *Listener) halt() error {
+	l.halted = true
+	return l.Connection.Close()
+}
+
+type ErrNoInitialHandler struct{}
+
+func (e ErrNoInitialHandler) Error() string {
+	return "no initial handler set"
+}
+
+type ErrNoPacketHandler struct{}
+
+func (e ErrNoPacketHandler) Error() string {
+	return "no packet handler set"
 }

@@ -12,7 +12,7 @@ const (
 )
 
 // Data received from the client.
-type Request struct {
+type Packet struct {
 	Timestamp     time.Time
 	LocalAddress  net.Addr
 	RemoteAddress net.Addr
@@ -20,14 +20,14 @@ type Request struct {
 	Data          []byte
 }
 
-// A Writer that can be used to respond to the client.
-type ResponseWriter struct {
+// A writer that can be used to respond to the client.
+type Responder struct {
 	connection net.PacketConn
 	address    net.Addr
 }
 
 // Writes data to the client.
-func (w ResponseWriter) Write(p []byte) (int, error) {
+func (w Responder) Write(p []byte) (int, error) {
 	return w.connection.WriteTo(p, w.address)
 }
 
@@ -35,13 +35,13 @@ func (w ResponseWriter) Write(p []byte) (int, error) {
 // As well as a timestamp, the connection, and the RequestHandler and ErrorHandler of the listener.
 // This data is passed to the server to construct the Request and ResponseWriter.
 type Bundle struct {
-	Timestamp      time.Time
-	Connection     net.PacketConn
-	RequestHandler func(ResponseWriter, *Request)
-	ErrorHandler   func(error) error
-	Length         int
-	LocalAddress   net.Addr
-	RemoteAddress  net.Addr
-	Data           []byte
-	Error          error
+	Timestamp     time.Time
+	Connection    net.PacketConn
+	PacketHandler func(Responder, *Packet)
+	ErrorHandler  func(error)
+	LocalAddress  net.Addr
+	RemoteAddress net.Addr
+	Length        int
+	Data          []byte
+	Error         error
 }

@@ -33,49 +33,38 @@ import (
 )
 
 func main() {
-    queue := udpsrv.NewStdQueue(256, runtime.NumCPU(), 100*time.Millisecond)
+    server := udpsrv.NewServer(udpsrv.NewBasicQueue(16))
 
     listener := udpsrv.Listener{
-        Address:       "127.0.0.1:49000",
-        PacketHandler: func(b udpsrv.Bundle) { queue.Enqueue(b) },
-        RequestHandler: func(w udpsrv.ResponseWriter, r *udpsrv.Request) {
-            length, err := w.Write(r.Data)
+        Address:        "127.0.0.1:49000",
+        BufferSize:     1024,
+        InitialHandler: func(b udpsrv.Bundle) { server.Queue.Enqueue(b) },
+        ErrorHandler:   func(err error) { log.Printf("%s", err) },
+        PacketHandler:  func(r udpsrv.Responder, p *udpsrv.Packet) {
+            length, err := r.Write(r.Data)
             if err != nil {
-                log.Printf("<%s> %d %d '%s' %s", r.RemoteAddress, r.Length, length, string(r.Data), err)
+                log.Printf("<%s> %d %d '%s' %s", p.RemoteAddress, p.Length, length, string(p.Data), err)
             } else {
-                log.Printf("<%s> %d %d '%s'", r.RemoteAddress, r.Length, length, string(r.Data))
+                log.Printf("<%s> %d %d '%s'", p.RemoteAddress, p.Length, length, string(p.Data))
             }
         },
-        ErrorHandler: func(err error) error {
-            log.Printf("%s", err)
-            return nil
-        },
     }
-
+    server.Listeners = append(server.Listeners, listener)
     log.Printf("listener setup on: %s", listener.Address)
-
-    server := udpsrv.Server{
-        Listeners:       []*udpsrv.Listener{&listener},
-        Queue:           queue,
-        ErrorHandler:    func(err error) { panic(err) },
-        ShutdownTimeout: 10 * time.Second,
-    }
 
     signals := make(chan os.Signal, 1)
     signal.Notify(signals, os.Interrupt, os.Kill)
     go func() {
-        server.Shutdown(fmt.Errorf("os signal received: %s", <-signals))
+        server.Halt(fmt.Errorf("os signal received: %s", <-signals), true, 10 * time.Second)
     }()
 
     log.Printf("starting server")
-    
     if err := server.Listen(); err != nil {
         log.Printf("error during setup: %s", err)
         os.Exit(1)
     }
 
     log.Printf("stopping server: %s", <-server.Done)
-
     if err := <-server.Done; err != nil {
         log.Printf("error during stop: %s", err)
         os.Exit(1)
@@ -115,3 +104,6 @@ $ ./client  "Hello, Four!"
 $ ./client  "Hello, Five!" 
 2022/08/07 16:06:18 (12) Hello, Five!
 ```
+
+## LICENSE
+[MIT](./LICENSE)
