@@ -13,21 +13,20 @@ func Example() {
 
 	listener := &Listener{
 		Address:        "127.0.0.1:49000",
+		BufferSize:     1024,
 		PacketHandler:  func(b Bundle) { queue.Enqueue(b) },
 		RequestHandler: func(w ResponseWriter, r *Request) { fmt.Printf("(%d) %s\n", r.Length, string(r.Data)) },
 		ErrorHandler:   func(err error) { fmt.Printf("%s", err) },
-		BufferSize:     1024,
 	}
 
 	server := Server{
-		Listeners:       []*Listener{listener},
-		Queue:           queue,
-		ShutdownTimeout: 10 * time.Second,
+		Listeners: []*Listener{listener},
+		Queue:     queue,
 	}
 
 	go func() {
 		time.Sleep(8 * time.Second)
-		server.Shutdown(fmt.Errorf("requested by user"))
+		server.Halt(fmt.Errorf("requested by user"), true, 10*time.Second)
 	}()
 
 	// simulate client

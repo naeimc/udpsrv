@@ -1,6 +1,7 @@
 package udpsrv
 
 import (
+	"errors"
 	"net"
 	"time"
 )
@@ -14,6 +15,11 @@ type Listener struct {
 	// See net.ListenPacket for suitable address strings.
 	Address string
 
+	// The size of the data buffer used by the client.
+	// If <= 0 the BufferSize is set to the the maximum size of a udp payload (65527).
+	// Data not captured in the buffer is discarded.
+	BufferSize int
+
 	// The PacketHandler is responsible for handling the bundles of data from the client.
 	// The bundles are usually passed to the server's queue.
 	// If nil a default PacketHandler is used that calls the Queue's Enqueue function.
@@ -25,16 +31,13 @@ type Listener struct {
 	// The ErrorHandler processes any errors returned by net.PacketConn.ReadFrom().
 	ErrorHandler func(error)
 
-	// The size of the data buffer used by the client.
-	// If <= 0 the BufferSize is set to the the maximum size of a udp payload (65527).
-	// Data not captured in the buffer is discarded.
-	BufferSize int
-
 	// The connection used by the listener.
 	Connection net.PacketConn
 
 	// The buffer used by the Listener.
 	Buffer []byte
+
+	halted bool
 }
 
 func (l *Listener) setup(queue Queue) error {
@@ -62,8 +65,13 @@ func (l *Listener) setup(queue Queue) error {
 }
 
 func (l *Listener) run() {
-	for {
+	for !l.halted {
 		length, address, err := l.Connection.ReadFrom(l.Buffer)
+
+		if l.halted && errors.Is(err, net.ErrClosed) {
+			return
+		}
+
 		l.PacketHandler(Bundle{
 			Timestamp:      time.Now().UTC(),
 			Connection:     l.Connection,
@@ -76,4 +84,9 @@ func (l *Listener) run() {
 			Error:          err,
 		})
 	}
+}
+
+func (l *Listener) halt() error {
+	l.halted = true
+	return l.Connection.Close()
 }

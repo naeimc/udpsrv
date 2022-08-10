@@ -11,15 +11,12 @@ type Server struct {
 	// The Queue on which server receives bundles of data from the listeners.
 	Queue Queue
 
-	// How long to wait for workers to complete before forcing a shutdown.
-	// If 0 the server waits forever.
-	ShutdownTimeout time.Duration
-
 	// The Done channel is channel (of size 2) that returns both the reason for the server shutdown
 	// and an error if the server times out during shutdown.
 	Done chan error
 
-	stopped bool
+	stopped     bool
+	haltChannel chan haltMessage
 }
 
 // Starts the server.
@@ -31,15 +28,8 @@ func (s *Server) Listen() error {
 	return nil
 }
 
-// Closes the server while waiting for the workers to complete
-// or a timeout to occur.
-func (s *Server) Shutdown(reason error) {
-	s.halt(reason, true)
-}
-
-// Closes the server wihout waiting for the workers to complete.
-func (s *Server) Close(reason error) {
-	s.halt(reason, false)
+func (s *Server) Halt(reason error, wait bool, timeout time.Duration) {
+	s.haltChannel <- haltMessage{reason, wait, timeout}
 }
 
 func (s *Server) setup() error {
@@ -47,13 +37,16 @@ func (s *Server) setup() error {
 		return ErrNoQueueAllocated{}
 	}
 
+	var listenerCount int
 	for _, listener := range s.Listeners {
 		if err := listener.setup(s.Queue); err != nil {
 			return err
 		}
 		go listener.run()
+		listenerCount++
 	}
 
+	s.haltChannel = make(chan haltMessage, 1)
 	s.Done = make(chan error, 2)
 
 	return nil
@@ -61,14 +54,18 @@ func (s *Server) setup() error {
 
 func (s *Server) run() {
 	for !s.stopped {
-		if s.Queue.Ready() {
-			go s.work(s.Queue.Dequeue())
+		select {
+		case h := <-s.haltChannel:
+			s.halt(h)
+		default:
+			if s.Queue.Ready() {
+				go s.work(s.Queue.Dequeue())
+			}
 		}
 	}
 }
 
 func (s *Server) work(b Bundle) {
-
 	defer s.Queue.Notify()
 
 	if b.Length > 0 {
@@ -92,16 +89,16 @@ func (s *Server) work(b Bundle) {
 	}
 }
 
-func (s *Server) halt(reason error, waitingForWorkers bool) {
+func (s *Server) halt(h haltMessage) {
 	s.stopped = true
 
+	listenerErrors := make([]error, 0)
 	for _, listener := range s.Listeners {
-		listener.Connection.Close()
+		listenerErrors = append(listenerErrors, listener.halt())
 	}
 
-	var err error
-
-	if waitingForWorkers {
+	var haltError error
+	if h.wait {
 		wait := make(chan bool, 1)
 		go func() {
 			s.Queue.Wait()
@@ -109,22 +106,31 @@ func (s *Server) halt(reason error, waitingForWorkers bool) {
 		}()
 
 		timeout := make(chan time.Time, 1)
-		if s.ShutdownTimeout > 0 {
+		if h.timeout > 0 {
 			go func() {
-				timeout <- <-time.NewTicker(s.ShutdownTimeout).C
+				timeout <- <-time.NewTicker(h.timeout).C
 			}()
 		}
 
 		select {
 		case <-timeout:
-			err = ErrShutdownTimedOut{}
+			haltError = ErrShutdownTimedOut{}
 		case <-wait:
 		}
 	}
 
-	s.Done <- reason
-	s.Done <- err
+	s.Done <- h.reason
+	s.Done <- haltError
+	for _, listenerError := range listenerErrors {
+		s.Done <- listenerError
+	}
 	close(s.Done)
+}
+
+type haltMessage struct {
+	reason  error
+	wait    bool
+	timeout time.Duration
 }
 
 type ErrShutdownTimedOut struct{}
