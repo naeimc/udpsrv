@@ -20,13 +20,14 @@ type Listener struct {
 	// Data not captured in the buffer is discarded.
 	BufferSize int
 
-	// The PacketHandler is responsible for handling the bundles of data from the client.
+	// The InitialHandler is responsible for handling the initial connection
+	// by the client and passing it on the the queue.
 	// The bundles are usually passed to the server's queue.
 	// If nil a default PacketHandler is used that calls the Queue's Enqueue function.
-	PacketHandler func(Bundle)
+	InitialHandler func(Bundle)
 
-	// The RequestHandler processes requests and provides an writer for responses.
-	RequestHandler func(ResponseWriter, *Request)
+	// The PacketHandler processes requests and provides an writer for responses.
+	PacketHandler func(Responder, *Packet)
 
 	// The ErrorHandler processes any errors returned by net.PacketConn.ReadFrom().
 	ErrorHandler func(error)
@@ -49,7 +50,7 @@ func (l *Listener) setup(queue Queue) error {
 	l.Connection = connection
 
 	if l.PacketHandler == nil {
-		l.PacketHandler = func(b Bundle) { queue.Enqueue(b) }
+		l.InitialHandler = func(b Bundle) { queue.Enqueue(b) }
 	}
 
 	if l.ErrorHandler == nil {
@@ -72,16 +73,16 @@ func (l *Listener) run() {
 			return
 		}
 
-		l.PacketHandler(Bundle{
-			Timestamp:      time.Now().UTC(),
-			Connection:     l.Connection,
-			RequestHandler: l.RequestHandler,
-			ErrorHandler:   l.ErrorHandler,
-			RemoteAddress:  address,
-			LocalAddress:   l.Connection.LocalAddr(),
-			Length:         length,
-			Data:           l.Buffer,
-			Error:          err,
+		l.InitialHandler(Bundle{
+			Timestamp:     time.Now().UTC(),
+			Connection:    l.Connection,
+			PacketHandler: l.PacketHandler,
+			ErrorHandler:  l.ErrorHandler,
+			RemoteAddress: address,
+			LocalAddress:  l.Connection.LocalAddr(),
+			Length:        length,
+			Data:          l.Buffer,
+			Error:         err,
 		})
 	}
 }

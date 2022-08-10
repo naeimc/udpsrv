@@ -47,7 +47,7 @@ func (s *Server) setup() error {
 	}
 
 	s.haltChannel = make(chan haltMessage, 1)
-	s.Done = make(chan error, 2)
+	s.Done = make(chan error, 2+listenerCount)
 
 	return nil
 }
@@ -69,12 +69,12 @@ func (s *Server) work(b Bundle) {
 	defer s.Queue.Notify()
 
 	if b.Length > 0 {
-		b.RequestHandler(
-			ResponseWriter{
+		b.PacketHandler(
+			Responder{
 				connection: b.Connection,
 				address:    b.RemoteAddress,
 			},
-			&Request{
+			&Packet{
 				Timestamp:     b.Timestamp,
 				LocalAddress:  b.LocalAddress,
 				RemoteAddress: b.RemoteAddress,
