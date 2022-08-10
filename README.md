@@ -46,7 +46,7 @@ func main() {
                 log.Printf("<%s> %d %d '%s'", r.RemoteAddress, r.Length, length, string(r.Data))
             }
         },
-        ErrorHandler: func(err error) error {
+        ErrorHandler: func(err error) {
             log.Printf("%s", err)
             return nil
         },
@@ -57,7 +57,6 @@ func main() {
     server := udpsrv.Server{
         Listeners:       []*udpsrv.Listener{&listener},
         Queue:           queue,
-        ErrorHandler:    func(err error) { panic(err) },
         ShutdownTimeout: 10 * time.Second,
     }
 
