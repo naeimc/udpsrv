@@ -48,7 +48,6 @@ func main() {
         },
         ErrorHandler: func(err error) {
             log.Printf("%s", err)
-            return nil
         },
     }
 
@@ -57,7 +56,6 @@ func main() {
     server := udpsrv.Server{
         Listeners:       []*udpsrv.Listener{&listener},
         Queue:           queue,
-        ShutdownTimeout: 10 * time.Second,
     }
 
     signals := make(chan os.Signal, 1)
