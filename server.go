@@ -69,7 +69,7 @@ func (s *Server) work(b Bundle) {
 	defer s.Queue.Notify()
 
 	if b.Length > 0 {
-		b.RequestHandler(
+		b.PacketHandler(
 			ResponseWriter{
 				connection: b.Connection,
 				address:    b.RemoteAddress,

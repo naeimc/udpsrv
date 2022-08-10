@@ -14,8 +14,8 @@ func Example() {
 	listener := &Listener{
 		Address:        "127.0.0.1:49000",
 		BufferSize:     1024,
-		PacketHandler:  func(b Bundle) { queue.Enqueue(b) },
-		RequestHandler: func(w ResponseWriter, r *Request) { fmt.Printf("(%d) %s\n", r.Length, string(r.Data)) },
+		InitialHandler: func(b Bundle) { queue.Enqueue(b) },
+		PacketHandler:  func(w ResponseWriter, r *Request) { fmt.Printf("(%d) %s\n", r.Length, string(r.Data)) },
 		ErrorHandler:   func(err error) { fmt.Printf("%s", err) },
 	}
 

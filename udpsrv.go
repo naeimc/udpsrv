@@ -35,13 +35,13 @@ func (w ResponseWriter) Write(p []byte) (int, error) {
 // As well as a timestamp, the connection, and the RequestHandler and ErrorHandler of the listener.
 // This data is passed to the server to construct the Request and ResponseWriter.
 type Bundle struct {
-	Timestamp      time.Time
-	Connection     net.PacketConn
-	RequestHandler func(ResponseWriter, *Request)
-	ErrorHandler   func(error)
-	Length         int
-	LocalAddress   net.Addr
-	RemoteAddress  net.Addr
-	Data           []byte
-	Error          error
+	Timestamp     time.Time
+	Connection    net.PacketConn
+	PacketHandler func(ResponseWriter, *Request)
+	ErrorHandler  func(error)
+	Length        int
+	LocalAddress  net.Addr
+	RemoteAddress net.Addr
+	Data          []byte
+	Error         error
 }
