@@ -7,11 +7,7 @@ import (
 )
 
 func Example() {
-
-	server := Server{
-		Listeners: make([]*Listener, 0),
-		Queue:     NewBasicQueue(2),
-	}
+	server := NewServer(NewBasicQueue(16))
 
 	listener := &Listener{
 		Address:        "127.0.0.1:49000",
@@ -20,7 +16,6 @@ func Example() {
 		PacketHandler:  func(r Responder, p *Packet) { fmt.Printf("(%d) %s\n", p.Length, string(p.Data)) },
 		ErrorHandler:   func(err error) { fmt.Printf("%s", err) },
 	}
-
 	server.Listeners = append(server.Listeners, listener)
 
 	go func() {

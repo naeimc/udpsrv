@@ -5,11 +5,12 @@ import (
 )
 
 type Server struct {
-	// All the listeners used by the server.
-	Listeners []*Listener
 
 	// The Queue on which server receives bundles of data from the listeners.
 	Queue Queue
+
+	// All the listeners used by the server.
+	Listeners []*Listener
 
 	// The Done channel is channel (of min size 2) that returns the reason for the server shutdown
 	// an error if the server times out during shutdown and any errors when closing the connection.
@@ -17,6 +18,13 @@ type Server struct {
 
 	stopped     bool
 	haltChannel chan haltMessage
+}
+
+func NewServer(queue Queue) *Server {
+	return &Server{
+		Queue:     queue,
+		Listeners: make([]*Listener, 0),
+	}
 }
 
 // Starts the server.
