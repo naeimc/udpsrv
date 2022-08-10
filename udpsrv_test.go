@@ -15,7 +15,7 @@ func Example() {
 		Address:        "127.0.0.1:49000",
 		BufferSize:     1024,
 		InitialHandler: func(b Bundle) { queue.Enqueue(b) },
-		PacketHandler:  func(w ResponseWriter, r *Request) { fmt.Printf("(%d) %s\n", r.Length, string(r.Data)) },
+		PacketHandler:  func(r Responder, p *Packet) { fmt.Printf("(%d) %s\n", p.Length, string(p.Data)) },
 		ErrorHandler:   func(err error) { fmt.Printf("%s", err) },
 	}
 
@@ -43,15 +43,14 @@ func Example() {
 		time.Sleep(2 * time.Second)
 		connection.Write([]byte("Hello, Two!"))
 	}()
-
 	fmt.Printf("listener setup on %s\n", server.Listeners[0].Address)
-	fmt.Printf("starting server\n")
 
+	fmt.Printf("starting server\n")
 	if err := server.Listen(); err != nil {
 		panic(err)
 	}
-	fmt.Printf("stopping server: %s\n", <-server.Done)
 
+	fmt.Printf("stopping server: %s\n", <-server.Done)
 	if err := <-server.Done; err != nil {
 		fmt.Printf("timeout error: %s\n", <-server.Done)
 	} else {

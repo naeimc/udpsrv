@@ -27,7 +27,7 @@ type Listener struct {
 	InitialHandler func(Bundle)
 
 	// The PacketHandler processes requests and provides an writer for responses.
-	PacketHandler func(ResponseWriter, *Request)
+	PacketHandler func(Responder, *Packet)
 
 	// The ErrorHandler processes any errors returned by net.PacketConn.ReadFrom().
 	ErrorHandler func(error)
