@@ -6,100 +6,96 @@ import (
 	"time"
 )
 
-// A Listener binds to a port and listens for data,
-// the data is then passed on to server along with the RequestHandler and ErrorHandler
-// to be processed by a worker.
 type Listener struct {
-
-	// The host and port of the server.
-	// See net.ListenPacket for suitable address strings.
-	Address string
-
-	// The size of the data buffer used by the client.
-	// If <= 0 the BufferSize is set to the the maximum size of a udp payload (65527).
-	// Data not captured in the buffer is discarded.
-	BufferSize int
-
-	// The InitialHandler is responsible for handling the initial connection
-	// by the client and passing it on the the queue.
-	// The bundles are usually passed to the server's queue.
-	// If nil a default PacketHandler is used that calls the Queue's Enqueue function.
-	InitialHandler func(Bundle)
-
-	// The PacketHandler processes requests and provides an writer for responses.
-	PacketHandler func(Responder, *Packet)
-
-	// The ErrorHandler processes any errors returned by net.PacketConn.ReadFrom().
-	ErrorHandler func(error)
-
-	// The connection used by the listener.
-	Connection net.PacketConn
-
-	// The buffer used by the Listener.
-	Buffer []byte
-
-	halted bool
+	running    bool
+	buffer     []byte
+	address    net.Addr
+	connection net.PacketConn
+	queue      chan<- *Packet
+	report     chan error
 }
 
-func (l *Listener) setup(queue Queue) error {
+func NewListener(queue chan<- *Packet, addr string, bufferSize int) (*Listener, error) {
+	if queue == nil {
+		return nil, ErrNoQueue{}
+	}
 
-	connection, err := net.ListenPacket(network, l.Address)
+	address, err := net.ResolveUDPAddr(Network, addr)
 	if err != nil {
-		return err
-	}
-	l.Connection = connection
-
-	if l.InitialHandler == nil {
-		return ErrNoInitialHandler{}
+		return nil, err
 	}
 
-	if l.PacketHandler == nil {
-		return ErrNoPacketHandler{}
+	connection, err := net.ListenPacket(Network, address.String())
+	if err != nil {
+		return nil, err
 	}
 
-	if l.BufferSize <= 0 {
-		l.BufferSize = maxUDPPayloadSize
+	if bufferSize <= 0 {
+		bufferSize = MaxUPDPayloadSize
 	}
-	l.Buffer = make([]byte, l.BufferSize)
 
+	return &Listener{
+		address:    address,
+		connection: connection,
+		queue:      queue,
+		buffer:     make([]byte, bufferSize),
+		report:     make(chan error, 2),
+	}, nil
+}
+
+// Start the Listener
+func (l *Listener) Start() {
+	for l.running = true; l.running; {
+		length, address, err := l.connection.ReadFrom(l.buffer)
+		buffer := make([]byte, length)
+		copy(buffer, l.buffer)
+
+		if errors.Is(err, net.ErrClosed) {
+			if l.running {
+				l.running = false
+				l.report <- err
+				l.report <- nil
+				close(l.report)
+			}
+			break
+		}
+
+		packet := &Packet{
+			Timestamp:     time.Now().UTC(),
+			LocalAddress:  l.address,
+			RemoteAddress: address,
+			Length:        length,
+			Data:          buffer,
+			Error:         err,
+			connection:    l.connection,
+		}
+
+		l.queue <- packet
+	}
+}
+
+// Stop the Listener
+func (l *Listener) Stop(reason error) error {
+	if !l.running {
+		return ErrListenerNotRunning{l.address.String()}
+	}
+
+	l.running = false
+	l.report <- reason
+	l.report <- l.connection.Close()
+	close(l.report)
 	return nil
 }
 
-func (l *Listener) run() {
-	for !l.halted {
-		length, address, err := l.Connection.ReadFrom(l.Buffer)
-
-		if l.halted && errors.Is(err, net.ErrClosed) {
-			return
-		}
-
-		l.InitialHandler(Bundle{
-			Timestamp:     time.Now().UTC(),
-			Connection:    l.Connection,
-			PacketHandler: l.PacketHandler,
-			ErrorHandler:  l.ErrorHandler,
-			RemoteAddress: address,
-			LocalAddress:  l.Connection.LocalAddr(),
-			Length:        length,
-			Data:          l.Buffer,
-			Error:         err,
-		})
-	}
+// Returns the stop reason and if there was an error while closing the connection.
+func (l Listener) Report() (reason, err error) {
+	return <-l.report, <-l.report
 }
 
-func (l *Listener) halt() error {
-	l.halted = true
-	return l.Connection.Close()
+func (l Listener) Running() bool {
+	return l.running
 }
 
-type ErrNoInitialHandler struct{}
-
-func (e ErrNoInitialHandler) Error() string {
-	return "no initial handler set"
-}
-
-type ErrNoPacketHandler struct{}
-
-func (e ErrNoPacketHandler) Error() string {
-	return "no packet handler set"
+func (l Listener) Address() net.Addr {
+	return l.address
 }

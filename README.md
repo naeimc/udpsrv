@@ -1,109 +1,112 @@
 # udpsrv
 
-UDP srv is a small UDP server written in Go (Golang).
+UDP srv is a small UDP server written in Go.
 
-## Contents
-- [udpsrv](#udpsrv)
-    - [Contents](#contents)
-    - [Getting Started](#getting-started)
-        - [Installation](#installation)
-        - [Server](#server)
-        - [Command Line](#command-line)
+## TODO
+  - [ ] Improve Documentation
 
 ## Getting Started
+
 ### Installation
-```sh
+```
 $ go get -u github.com/naeimc/udpsrv
 ```
 
 ### Server
+The following is a simple echo server.
 `server.go`
 ```go
 package main
 
 import (
-    "fmt"
-    "log"
-    "os"
-    "os/signal"
-    "runtime"
-    "time"
-    
-    "github.com/naeimc/udpsrv"
+	"fmt"
+	"os"
+	"os/signal"
+	"time"
+
+	"github.com/naeimc/udpsrv"
+	"github.com/naeimc/udpsrv/udpsrvq"
+)
+
+const (
+	timeFormat     = "2006-01-02 15:04:05"
+	address        = "127.0.0.1:32000"
+	bufferSize     = 1024
+	waitForWorkers = true
+	timeout        = 30 * time.Second
 )
 
 func main() {
-    server := udpsrv.NewServer(udpsrv.NewBasicQueue(16))
+	queue := udpsrvq.NewBasicQueue()
+	queue.PacketHandler = packetHandler
+	queue.ErrorHandler = errorHandler
+	log("starting queue")
+	go queue.Start()
 
-    listener := udpsrv.Listener{
-        Address:        "127.0.0.1:49000",
-        BufferSize:     1024,
-        InitialHandler: func(b udpsrv.Bundle) { server.Queue.Enqueue(b) },
-        ErrorHandler:   func(err error) { log.Printf("%s", err) },
-        PacketHandler:  func(r udpsrv.Responder, p *udpsrv.Packet) {
-            length, err := r.Write(r.Data)
-            if err != nil {
-                log.Printf("<%s> %d %d '%s' %s", p.RemoteAddress, p.Length, length, string(p.Data), err)
-            } else {
-                log.Printf("<%s> %d %d '%s'", p.RemoteAddress, p.Length, length, string(p.Data))
-            }
-        },
-    }
-    server.Listeners = append(server.Listeners, listener)
-    log.Printf("listener setup on: %s", listener.Address)
+	listener, err := udpsrv.NewListener(queue.Input(), address, bufferSize)
+	if err != nil {
+		log("cannot setup listener: %s", err)
+	}
+	log("starting listener on %s", listener.Address())
+	go listener.Start()
 
-    signals := make(chan os.Signal, 1)
-    signal.Notify(signals, os.Interrupt, os.Kill)
-    go func() {
-        server.Halt(fmt.Errorf("os signal received: %s", <-signals), true, 10 * time.Second)
-    }()
+	server := udpsrv.NewServer(queue.Output(), waitForWorkers, timeout)
+	server.Register(queue.Stop)
+	server.Register(listener.Stop)
 
-    log.Printf("starting server")
-    if err := server.Listen(); err != nil {
-        log.Printf("error during setup: %s", err)
-        os.Exit(1)
-    }
+	go func() {
+		signals := make(chan os.Signal, 1)
+		signal.Notify(signals, os.Interrupt)
+		<-signals
+		server.Stop(fmt.Errorf("received interrupt"))
+	}()
 
-    log.Printf("stopping server: %s", <-server.Done)
-    if err := <-server.Done; err != nil {
-        log.Printf("error during stop: %s", err)
-        os.Exit(1)
-    }
+	log("starting server")
+	server.Start()
+
+	reason, err := server.Report()
+	log("stopping server: %s", reason)
+	if err != nil {
+		log("error during shutdown: %s", err)
+	}
+}
+
+func packetHandler(r udpsrv.Response, p *udpsrv.Packet) {
+	length, err := r.Write(p.Data)
+	log("<%s|%s> %d %d", p.LocalAddress, p.RemoteAddress, p.Length, length)
+	if err != nil {
+		log("<%s|%s> %s", p.LocalAddress, p.RemoteAddress, err)
+	}
+}
+
+func errorHandler(err error) {
+	log("%s", err)
+}
+
+func log(format string, a ...any) {
+	fmt.Fprintf(os.Stderr, "[%s] %s\n", timestamp(), fmt.Sprintf(format, a...))
+}
+
+func timestamp() string {
+	return time.Now().UTC().Format(timeFormat)
 }
 ```
 
-### Command Line
-Server Side:
-```sh
-$ go build server.go
-$ ./server
-2022/08/07 16:05:41 listener setup on: 127.0.0.1:49000
-2022/08/07 16:05:41 starting server
-2022/08/07 16:05:52 <127.0.0.1:53761> 11 11 'Hello, One!'
-2022/08/07 16:06:00 <127.0.0.1:53762> 11 11 'Hello, Two!'
-2022/08/07 16:06:06 <127.0.0.1:53763> 13 13 'Hello, Three!'
-2022/08/07 16:06:12 <127.0.0.1:53767> 12 12 'Hello, Four!'
-2022/08/07 16:06:18 <127.0.0.1:58945> 12 12 'Hello, Five!'
-2022/08/07 16:06:22 stopping server: os signal received: interrupt
+Server Side Logs
+```
+[2022-08-17 15:08:12] starting queue
+[2022-08-17 15:08:12] starting listener on 127.0.0.1:32000
+[2022-08-17 15:08:12] starting server
+[2022-08-17 15:08:52] <127.0.0.1:32000|127.0.0.1:60514> 13 13
+[2022-08-17 15:09:03] stopping server: received interrupt
 ```
 
-Client Side:
-```sh
-$ ./client "Hello, One!"
-2022/08/07 16:05:52 (11) Hello, One!
-
-$ ./client  "Hello, Two!" 
-2022/08/07 16:06:00 (11) Hello, Two!
-
-$ ./client  "Hello, Three!" 
-2022/08/07 16:06:06 (13) Hello, Three!
-
-$ ./client  "Hello, Four!"  
-2022/08/07 16:06:12 (12) Hello, Four!
-
-$ ./client  "Hello, Five!" 
-2022/08/07 16:06:18 (12) Hello, Five!
+Client Side Logs
 ```
+Sent: Hello, World!
+Received: Hello, World!
+```
+
 
 ## LICENSE
 [MIT](./LICENSE)
