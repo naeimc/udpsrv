@@ -6,42 +6,32 @@ import (
 )
 
 const (
-	network           = "udp"
-	maxUDPPayloadSize = 65527
-	defaultQueueSize  = 256
+	MaxUPDPayloadSize = 65527
+	Network           = "udp"
 )
 
-// Data received from the client.
+// A Packet represents the data received from the client and
+// the behaviour to be performed by the server.
 type Packet struct {
-	Timestamp     time.Time
-	LocalAddress  net.Addr
-	RemoteAddress net.Addr
-	Length        int
-	Data          []byte
+	Timestamp     time.Time               // The time when the data was received
+	LocalAddress  net.Addr                // The address of the listener
+	RemoteAddress net.Addr                // The address of the client
+	Length        int                     // The size of the data
+	Data          []byte                  // The data sent by the client
+	Error         error                   // An error that may be raised
+	PacketHandler func(Response, *Packet) // How the packet should be handled by the server
+	ErrorHandler  func(error)             // How the error should be handled by the server
+
+	connection net.PacketConn
 }
 
 // A writer that can be used to respond to the client.
-type Responder struct {
+type Response struct {
 	connection net.PacketConn
 	address    net.Addr
 }
 
 // Writes data to the client.
-func (w Responder) Write(p []byte) (int, error) {
-	return w.connection.WriteTo(p, w.address)
-}
-
-// Contains all the data received from a client.
-// As well as a timestamp, the connection, and the RequestHandler and ErrorHandler of the listener.
-// This data is passed to the server to construct the Request and ResponseWriter.
-type Bundle struct {
-	Timestamp     time.Time
-	Connection    net.PacketConn
-	PacketHandler func(Responder, *Packet)
-	ErrorHandler  func(error)
-	LocalAddress  net.Addr
-	RemoteAddress net.Addr
-	Length        int
-	Data          []byte
-	Error         error
+func (r Response) Write(p []byte) (n int, err error) {
+	return r.connection.WriteTo(p, r.address)
 }
